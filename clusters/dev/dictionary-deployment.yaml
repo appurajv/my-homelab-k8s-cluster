@@ -1,8 +1,31 @@
 apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: dictionary-db-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual # 👈 Custom identifier matching your PVC
+  local:
+    path: /mnt/data/postgres # 👈 The folder on your physical Raspberry Pi file system
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - raspberrypi-node-name # 👈 CHANGE THIS to the exact name of your Raspberry Pi worker node
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: dictionary-db-pvc
 spec:
+  storageClassName: manual
   accessModes:
     - ReadWriteOnce
   resources:
