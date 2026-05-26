@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dictionary-db-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dictionary-db-deployment
+spec:
+  replicas: 1 # Must ALWAYS remain 1 for standard database storage locks
+  selector:
+    matchLabels:
+      app: dictionary-db
+  template:
+    metadata:
+      labels:
+        app: dictionary-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "appu"
+            - name: POSTGRES_PASSWORD
+              value: "Admin@1234"
+            - name: POSTGRES_DB
+              value: "kannada_dict"
+          volumeMounts:
+            - name: pgdata-storage
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: pgdata-storage
+          persistentVolumeClaim:
+            claimName: dictionary-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-service # 👈 Matches the internal network hostname used in your DATABASE_URL!
+spec:
+  ports:
+    - port: 5432
+  selector:
+    app: dictionary-db
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dictionary-web-deployment
+spec:
+  replicas: 2 # Scaled to two instances for automated traffic load-balancing
+  selector:
+    matchLabels:
+      app: dictionary-web
+  template:
+    metadata:
+      labels:
+        app: dictionary-web
+    spec:
+      containers:
+        - name: web
+          image: your_username/dictionary-app:v1.0 # 👈 Update to your Docker Hub name!
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5001
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: DATABASE_URL
+              value: "postgresql://appu:Admin%401234@db-service:5432/kannada_dict"
+            - name: ADMIN_PASSWORD
+              value: "Admin@1234"
+            - name: SESSION_SECRET
+              value: "wertyuiop1234567890"
+            - name: PORT
+              value: "5001"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dictionary-web-service
+spec:
+  type: LoadBalancer # Automatically assigns an external IP on cloud providers
+  ports:
+    - port: 80         # Listens externally on standard web port 80
+      targetPort: 5001 # Routes internally to your Express container
+  selector:
+    app: dictionary-web
